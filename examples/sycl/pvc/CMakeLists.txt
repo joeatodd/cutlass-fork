@@ -56,3 +56,8 @@ cutlass_example_add_executable(
   pvc_gemm_streamk
   pvc_gemm_streamk.cpp
 )
+
+cutlass_example_add_executable(
+  pvc_gemm_mixed_dtype
+  pvc_gemm_mixed_dtype.cpp
+)
