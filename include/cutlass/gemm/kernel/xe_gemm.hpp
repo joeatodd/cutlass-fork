@@ -154,7 +154,7 @@ public:
 
     auto mainloop_args = CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace);
 
-    auto l_coord = BlockIdxZ();
+    auto l_coord = 0;//BlockIdxZ();
     Tensor mA_mk = mainloop_args.mA(_,_,l_coord);
     Tensor mB_nk = mainloop_args.mB(_,_,l_coord);
 
@@ -291,17 +291,17 @@ public:
       params.mainloop
     );
 
-    CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
-    epilogue(
-      problem_shape_MNKL,
-      subgroup_shape, // TODO(codeplay): Inconsistency here w/ blk_coord_mnkl
-      blk_coord_mnkl,
-      accumulators,
-      tiled_mma,
-      residue_mnk,
-      thread_idx,
-      smem_buf
-    );
+    // CollectiveEpilogue epilogue{params.epilogue, shared_storage.epilogue};
+    // epilogue(
+    //   problem_shape_MNKL,
+    //   subgroup_shape, // TODO(codeplay): Inconsistency here w/ blk_coord_mnkl
+    //   blk_coord_mnkl,
+    //   accumulators,
+    //   tiled_mma,
+    //   residue_mnk,
+    //   thread_idx,
+    //   smem_buf
+    // );
   }
 };
 

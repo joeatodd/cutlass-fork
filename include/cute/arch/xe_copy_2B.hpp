@@ -265,9 +265,11 @@ struct XE_2D_U16x1x16_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<ushort *>(dst) =
+    // *reinterpret_cast<ushort *>(dst) =
+    ushort result =
         __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+    *dst = sycl::bit_cast<T>(result);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif

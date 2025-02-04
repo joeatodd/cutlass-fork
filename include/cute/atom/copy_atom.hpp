@@ -96,7 +96,8 @@ struct Copy_Atom<Copy_Traits<Args...>, CopyInternalType>
   {
     static_assert(SLayout::rank == 1, "Expected rank-1 src tensor");
     static_assert(DLayout::rank == 1, "Expected rank-1 dst tensor");
-
+    // Here, for copy_B, NumValSrc == 4..., for epilogue D store it's 8.
+    // 
     if constexpr (is_constant<NumValSrc, decltype(size(src))>::value ||
                   is_constant<NumValDst, decltype(size(dst))>::value) {
       // Dispatch to unpack to execute instruction

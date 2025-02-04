@@ -36,6 +36,7 @@
 #include <cute/algorithm/prefetch.hpp>
 #include <cute/arch/copy_xe.hpp>
 
+#define PRINT(x) print(#x ": "); print(x); print("\n");
 namespace cute {
 
 namespace detail {
@@ -182,6 +183,24 @@ struct XE_2D_LD_Unpack {
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
                  &*dst.data());
+    // if(cute::thread(0, 33) && traits.height == 32){
+    if(0 && cute::block(16) && traits.height == 32){
+      // PRINT(x); // x == 0
+      // PRINT(y); // y == 31
+      // PRINT(inst_size); // 2
+      // PRINT(sizeof(dtype)); // 2
+      // PRINT(base_addr); // Some address
+      // PRINT(l); // 0
+      // PRINT(traits.stride_l); // 0
+      // PRINT(is_need_reversed); // true
+      // PRINT(traits.width); //5120
+      // PRINT(traits.height); //32
+      // PRINT(traits.pitch); //5120
+      // PRINT(dst);
+     auto thread_id = syclcompat::local_id::x() + syclcompat::local_id::y() * syclcompat::local_range::x() +
+          syclcompat::local_id::z() * syclcompat::local_range::x() * syclcompat::local_range::y();
+      cute::print("tid: %d base: %x x: %d y: %d dst0: %f dst1: %f\n", int(thread_id), base_addr, x, y, static_cast<float>(dst(0)), static_cast<float>(dst(1)));
+    }
   }
 
   template <class... CA_Args, class TS, class SLayout>
@@ -2233,6 +2252,12 @@ struct Xe2DTiledCopy : TiledCopy<Copy_Atom, LayoutCopy_TV, ShapeTiler_MN>{
   }
 };
 
+/** Produce a TiledCopy from logical thread and values layouts.
+ * The thread and value layouts map coordinates to thr_idx and val_idx.
+ *    The product of these layouts is taken to produce the TV layout and the Tiler.
+ * Useful when threads and values need very specific mappings onto coordinates
+ *    in the target tensors.
+ */
 template <class... Args,
           class ThrLayout,
           class ValLayout = typename Copy_Atom<Args...>::Value_Layout>
@@ -2244,19 +2269,21 @@ make_xe_2d_copy(Copy_Atom<Args...> const& copy_atom,
 {
   // Take the raked_products to compute the Layout_MN
   // (M,N) -> (thr_idx, val_idx)
-  auto layout_mn = raked_product(thr_layout, val_layout);
+  auto layout_mn = blocked_product(thr_layout, val_layout);
   // (thr_idx, val_idx) -> (M,N)
   auto layout_tv = right_inverse(layout_mn).with_shape(make_shape(size(thr_layout), size(val_layout)));
   // Tiler for extracting relevant elements
   // (M,N) -> tensor coord
   auto tiler = product_each(shape(layout_mn));
 
-#if 0
+#if 1
+  if(cute::thread0()){
   print("thr_layout: "); print(thr_layout); print("\n");
   print("val_layout: "); print(val_layout); print("\n");
   print("layout_mn : "); print(layout_mn);  print("\n");
   print("layout_tv : "); print(layout_tv);  print("\n");
   print("tiler     : "); print(tiler);      print("\n");
+  }
 #endif
 
   return Xe2DTiledCopy<Copy_Atom<Args...>, decltype(layout_tv), decltype(tiler)>{copy_atom};
