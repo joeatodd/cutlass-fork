@@ -184,7 +184,9 @@ struct XE_2D_LD_Unpack {
                  intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
                  &*dst.data());
     // if(cute::thread(0, 33) && traits.height == 32){
-    if(0 && cute::block(16) && traits.height == 32){
+    auto thread_id = syclcompat::local_id::x() + syclcompat::local_id::y() * syclcompat::local_range::x() +
+      syclcompat::local_id::z() * syclcompat::local_range::x() * syclcompat::local_range::y();
+    if(0 && cute::block(0) && thread_id < 16 && traits.height == 32){
       // PRINT(x); // x == 0
       // PRINT(y); // y == 31
       // PRINT(inst_size); // 2
@@ -197,9 +199,8 @@ struct XE_2D_LD_Unpack {
       // PRINT(traits.height); //32
       // PRINT(traits.pitch); //5120
       // PRINT(dst);
-     auto thread_id = syclcompat::local_id::x() + syclcompat::local_id::y() * syclcompat::local_range::x() +
-          syclcompat::local_id::z() * syclcompat::local_range::x() * syclcompat::local_range::y();
-      cute::print("tid: %d base: %x x: %d y: %d dst0: %f dst1: %f\n", int(thread_id), base_addr, x, y, static_cast<float>(dst(0)), static_cast<float>(dst(1)));
+      cute::print("tid: %d base: %x x: %d y: %d \n", int(thread_id), base_addr, x, y);
+      // cute::print("tid: %d base: %x x: %d y: %d dst0: %f\n", int(thread_id), base_addr, x, y, static_cast<float>(dst(0)));
     }
   }
 

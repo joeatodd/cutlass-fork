@@ -502,7 +502,7 @@ public:
   //   auto prefetch_iter_b = append_pvc_tensor<0>(block2d_prefetch_iter_b, k_tile_count, BLK_K);
   //
   //
-  #define CUTLASS_ENABLE_DEBUG_PRINTS 1
+  #define CUTLASS_ENABLE_DEBUG_PRINTS 0
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
   //     // PRINT(block2d_copy_iter_a);
@@ -536,11 +536,15 @@ public:
     int k_tile_count2 = 128;
     bfloat16_t result[2];
 
-    const void *baseoffset = mainloop.mScale.data().get();
+    // const void *baseoffset = mainloop.mScale.data().get();
+    const void *baseoffset = atom_load_scale{}.with(mainloop.mScale).base_ptr;
     bfloat16_t * base_addr = (bfloat16_t*)baseoffset;
-    int width = 5120;
-    int height = 32;
-    int pitch = width;
+    int width = atom_load_scale{}.with(mainloop.mScale).width;
+    int height = atom_load_scale{}.with(mainloop.mScale).height;
+    int pitch = atom_load_scale{}.with(mainloop.mScale).pitch;
+    // int width = 5120;
+    // int height = 32;
+    // int pitch = width;
 
     constexpr int R = 3;
     Tensor src_v = group_modes<1,R>(copy_iter_s(_, _, _, 0));
@@ -554,19 +558,19 @@ public:
     // for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k) {
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
       // if constexpr(ModeHasScales){
+#define HURT_ME 1
+#if HURT_ME
+      copy(tiled_copy_scale, copy_iter_s(_, _, _, 0), fragment_scale_input);
         // copy(tiled_copy_scale, copy_iter_s(_, _, _, k + (k_tile / k_reload_factor)), copy_tCrS);
-        // copy(tiled_copy_scale, copy_iter_s(_, _, _, 0), fragment_scale_input);
-     int stride_l = 327680; 
+#else
+      int stride_l = 327680; 
       ushort short_result = __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
       (long)(base_addr + l0 * stride_l), width - 1, height - 1, pitch - 1, coord0);
-      // ushort short_result = __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
-      //     (long)(baseoffset), width - 1, height - 1, pitch - 1, coord0);
-      // TODO(joe): Expression is not assignable...
       *(&*(dst_v(_, 0).data())) = sycl::bit_cast<bfloat16_t>(short_result);
       short_result = __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
       (long)(base_addr + l1 * stride_l), width - 1, height - 1, pitch - 1, coord1);
       *(&*(dst_v(_, 1).data())) = sycl::bit_cast<bfloat16_t>(short_result);
-
+#endif
         // }
         // Copy gmem to rmem for the first k_tile
         // copy(tiled_copy_a, copy_iter_a(_,_,_,k), copy_tCrA);
