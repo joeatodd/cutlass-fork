@@ -590,7 +590,7 @@ public:
         // cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
     }
     // if(cute::thread(1,0)){
-    if(cute::block(0)){
+    if(cute::thread(1)){
       cute::print("%d Post copy0: %f\n", thread_idx, static_cast<float>(fragment_scale_input(0)));
       cute::print("%d Post copy1: %f\n", thread_idx, static_cast<float>(fragment_scale_input(1)));
       // cute::print("%d Post copy0 result: %f\n", 0, static_cast<float>(result[0]));
