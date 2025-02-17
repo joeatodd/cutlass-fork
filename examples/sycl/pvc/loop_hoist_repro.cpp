@@ -56,11 +56,16 @@ int main(int argc, const char** argv)
   
   q.parallel_for(sycl::nd_range<1>{thread_count, 64}, [=](sycl::nd_item<1> item)[[sycl::reqd_sub_group_size(16)]]{
 
+    int dynamic_loop_range = dev_T[256]; // = 256
     std::array<coord_t, 2> coord_arr = {coord_t{0, 0}, coord_t{16, 0}};
     std::array<T, 2> copy_result;
-    for (int i = 0; i < 2; ++i){
-      XE_2D_U16x1x16_LD_N::copy<T>(dev_T, width, height, pitch, coord_arr[i], &copy_result[i]);
+
+    for (int j = 0; j < dynamic_loop_range; ++j){
+      for (int i = 0; i < 2; ++i){
+        XE_2D_U16x1x16_LD_N::copy<T>(dev_T, width, height, pitch, coord_arr[i], &copy_result[i]);
+      }
     }
+
     int thread_id = item.get_global_linear_id();
     int sg_id = thread_id % 16;
     dev_success[thread_id] = (copy_result[0] == sg_id && copy_result[1] == sg_id + 16);
@@ -70,5 +75,4 @@ int main(int argc, const char** argv)
   q.memcpy(host_success.data(), dev_success, thread_count*sizeof(int)).wait(); 
   bool passed = std::all_of(host_success.begin(), host_success.end(), [](int a){return a;});
   std::cout << "Passed: " << passed << std::endl;
-  // for(int i = 0; i < thread_count; ++i) std::cout << host_success[i] << std::endl;
 }
