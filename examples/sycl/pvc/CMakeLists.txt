@@ -62,6 +62,11 @@ cutlass_example_add_executable(
   pvc_gemm_streamk.cpp
 )
 
+cutlass_example_add_executable(
+  loop_hoist_repro
+  loop_hoist_repro.cpp
+)
+
 add_subdirectory(flash_attention_v2)
 add_subdirectory(mixed_dtype)
 
