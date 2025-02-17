@@ -28,9 +28,9 @@ struct XE_2D_U16x1x16_LD_N {
                                     int height, int pitch, coord_t coord,
                                     T *dst) {
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<ushort *>(dst) =
+    *dst = sycl::bit_cast<T>(
         __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
-            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord));
   }
 };
 
@@ -53,7 +53,7 @@ int main(int argc, const char** argv)
   q.memcpy(dev_T, host_data.data(), alloc_size * sizeof(T)).wait();
 
   int* dev_success = sycl::malloc_device<int>(thread_count, q);
-  
+
   q.parallel_for(sycl::nd_range<1>{thread_count, 64}, [=](sycl::nd_item<1> item)[[sycl::reqd_sub_group_size(16)]]{
 
     int dynamic_loop_range = dev_T[256]; // = 256
