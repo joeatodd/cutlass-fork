@@ -207,10 +207,7 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
     // Instantiate the MMA object and get thread slice
     TiledMma tiled_mma;
-    // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
-    auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
+    auto thr_mma = tiled_mma.get_slice(thread_idx);
 
     // Partition
     Tensor tCgA = thr_mma.partition_A(gA);

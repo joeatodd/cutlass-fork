@@ -1,3 +1,4 @@
+#define PRINT(x) print(#x ": "); print(x); print("\n");
 /***************************************************************************************************
  * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
@@ -174,13 +175,24 @@ struct XE_2D_LD_Unpack {
       //            "Src tensor size does not match copy atom size");
     static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_LD_t::DstLayout{}),
                   "Dst tensor size does not match copy atom size");
+    static_assert(std::is_same_v<typename Traits_LD_t::ThrID, Layout<_16>>);
 
     dtype *base_addr = (dtype *)traits.base_ptr;
   
     auto [m, n, l] = src.data().coord_;
     int x = is_need_reversed ? m : n;
     int y = is_need_reversed ? n : m;
+
+    int sg_thread_id = syclcompat::get_nd_item<1>().get_sub_group().get_local_linear_id();
+    constexpr int offset = stride<0>(typename Traits_LD_t::DstLayout{})/dtype_bits;
+    x -= sg_thread_id * offset;
+
     constexpr auto inst_size = detail::size_of_inst<CopyOp, dtype>;
+    int thread0_x = sycl::group_broadcast(syclcompat::get_nd_item<3>().get_sub_group(), x, 0);
+    int thread0_y = sycl::group_broadcast(syclcompat::get_nd_item<3>().get_sub_group(), y, 0);
+    if(thread0_x != x || thread0_y != y){
+       cute::print("OH NOOOOO \n\n\n\n\n");
+    }
 
     CopyOp::copy(base_addr + l * traits.stride_l,
                  traits.width * sizeof(dtype), traits.height,
@@ -334,12 +346,27 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
     static_assert(is_rmem<TS>::value);
     static_assert(size(SLayout{}) * dtype_bits == size<1>(typename Traits_ST_t::SrcLayout{}),
                   "Src tensor size does not match copy atom size");
+    static_assert(std::is_same_v<typename Traits_ST_t::ThrID, Layout<_16>>);
     //static_assert(size(DLayout{}) * dtype_bits == size<1>(typename Traits_ST_t::DstLayout{}),
       //            "Dst tensor size does not match copy atom size");
 
     dtype *base_addr = (dtype *)traits.base_ptr;
     
     auto [m, n, l] = dst.data().coord_;
+
+    int sg_thread_id = syclcompat::get_nd_item<1>().get_sub_group().get_local_linear_id();
+    constexpr int offset = stride<0>(typename Traits_ST_t::SrcLayout{})/dtype_bits;
+    // n -= sg_thread_id * offset;
+    // n -= sg_thread_id * offset;
+    int thread0_m = sycl::group_broadcast(syclcompat::get_nd_item<3>().get_sub_group(), m, 0);
+    int thread0_n = sycl::group_broadcast(syclcompat::get_nd_item<3>().get_sub_group(), n, 0);
+    if(thread0_m != m || thread0_n != n){
+       cute::print("OH NOOOOO \n\n\n\n\n");
+    }
+    if(cute::thread(1)){
+      PRINT(thread0_m);
+      PRINT(m);
+    }
 
     CopyOp::copy(base_addr + l * traits.stride_l,
                  traits.width * sizeof(dtype), traits.height,
