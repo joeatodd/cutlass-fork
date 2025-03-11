@@ -171,8 +171,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
     auto [M,N,K,L] = problem_shape;
 
-    auto tiled_copy_a = Copy_A{}.with(static_cast<ElementA const *>(args.ptr_A), M, K);
-    auto tiled_copy_b = Copy_B{}.with(static_cast<ElementB const *>(args.ptr_B), N, K);
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(
+                                   static_cast<ElementA const*>(args.ptr_A), M, K),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(
+                                   static_cast<ElementB const*>(args.ptr_B), N, K),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
     auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
                               make_layout(make_shape(M, K, L), args.dA));
@@ -214,28 +220,19 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
+    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+  
+    // Retile registers for copies
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(tCrB);
+    
+    // Retile global tile for copies
     // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
-    // TODO(joe): We only need this here because `partition_fragment_A/B` doesn't currently accept
-    // a counting tensor
-    Tensor gA_gmem = local_tile(mainloop.mA, select<0,2>(WorkgroupTileShape{}), make_coord(m_idx,_,l_idx));
-    Tensor gB_gmem = local_tile(mainloop.mB, select<1,2>(WorkgroupTileShape{}), make_coord(n_idx,_,l_idx));
 
-    // Define the fragments for the MMA
-    Tensor fragment_A = thr_mma.partition_fragment_A(gA_gmem(_,_,0));
-    Tensor fragment_B = thr_mma.partition_fragment_B(gB_gmem(_,_,0));
-  
-    // Retile fragmens for copies
-    Tensor copy_tCrA = thr_copy_A.retile_D(fragment_A);
-    Tensor copy_tCrB = thr_copy_B.retile_D(fragment_B);
-
-    // Work around the fact that Xe copies don't respect atom layout info
-    Tensor mma_tCrA = retile_MMA(mainloop.copy_A, thr_mma, fragment_A);
-    Tensor mma_tCrB = retile_MMA(mainloop.copy_B, thr_mma, fragment_B);
-
-    // Tensor mma_tCrB = thr_copy_B_SWAP.retile_MMA(thr_mma, fragment_B);
 #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
       print("======================= A: \n");
@@ -258,6 +255,11 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
 
+    Tensor block2d_copy_iter_a = mainloop.copy_A.get_pvc_tensor(make_coord(m_coord, 0, l_coord), tArA.shape());
+    auto copy_iter_a = append_pvc_tensor<1>(block2d_copy_iter_a, k_tile_count, BLK_K);
+
+    Tensor block2d_copy_iter_b = mainloop.copy_B.get_pvc_tensor(make_coord(n_coord, 0, l_coord), tBrB.shape());
+    auto copy_iter_b = append_pvc_tensor<1>(block2d_copy_iter_b, k_tile_count, BLK_K);
     const auto k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
 
     auto sub_group_id = get_sub_group_id();
@@ -270,34 +272,27 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     auto tiled_prefetch_a = XE_Prefetch_A{mainloop.mA};
     auto tiled_prefetch_b = XE_Prefetch_B{mainloop.mB};
 
-    // TODO(joe): Prefetch isn't working (poor perf) but it compiles & runs...
-    auto thr_prefetch_copy_A = tiled_prefetch_a.get_slice(thread_idx);
-    auto thr_prefetch_copy_B = tiled_prefetch_b.get_slice(thread_idx);
+    auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
+                                            prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
+                                            l_coord);        
+    Tensor block2d_prefetch_iter_a = tiled_prefetch_a.get_pvc_tensor(prefetch_a_coordinate, make_shape(_1{}, _1{}, _1{}));
 
-    auto prefetch_iter_a = thr_prefetch_copy_A.partition_S(gA);
-    auto prefetch_iter_b = thr_prefetch_copy_B.partition_S(gB);
+    // no transpose prefetch size(8x32), prefetch shape is (32x1)
+    Tensor prefetch_iter_a = append_pvc_tensor<ld_a>(block2d_prefetch_iter_a, k_tile_count,
+                                                    (get<ld_a>(PrefetchAThrShape{}) * get<ld_a>(PrefetchATileSize{})));
 
-    // auto prefetch_a_coordinate = make_coord(prefetch_a_coord_0 + (sub_group_id / get<1>(PrefetchAThrShape{})) * get<0>(PrefetchATileSize{}),
-    //                                         prefetch_a_coord_1 + (sub_group_id % get<1>(PrefetchAThrShape{})) * get<1>(PrefetchATileSize{}),
-    //                                         l_coord);        
-    // Tensor block2d_prefetch_iter_a = tiled_prefetch_a.get_pvc_tensor(prefetch_a_coordinate, make_shape(_1{}, _1{}, _1{}));
-    //
-    // // no transpose prefetch size(8x32), prefetch shape is (32x1)
-    // Tensor prefetch_iter_a = append_pvc_tensor<ld_a>(block2d_prefetch_iter_a, k_tile_count,
-    //                                                 (get<ld_a>(PrefetchAThrShape{}) * get<ld_a>(PrefetchATileSize{})));
-
-    // // 0/Hight/vertical/ 
-    // const int prefetch_b_coord_0 =  is_B_transposed ? n_idx * BLK_N: k_start_idx * BLK_K;
-    // // 1/Width/Horisontal 
-    // const int prefetch_b_coord_1 =  is_B_transposed ? k_start_idx * BLK_K : n_idx * BLK_N;
-    // constexpr int ld_b = is_B_transposed ? 1 : 0;
-    // auto prefetch_b_coordinate = make_coord(prefetch_b_coord_0 + (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}),
-    //                                         prefetch_b_coord_1 + (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}),
-    //                                         l_coord);
-    // Tensor block2d_prefetch_iter_b = tiled_prefetch_b.get_pvc_tensor(prefetch_b_coordinate, make_shape(_1{}, _1{}, _1{}));
-    // // no transpose prefetch size(8x32), prefetch shape is (4x8)
-    // Tensor prefetch_iter_b = append_pvc_tensor<ld_b>(block2d_prefetch_iter_b, k_tile_count,
-    //                                                   (get<ld_b>(PrefetchBThrShape{}) * get<ld_b>(PrefetchBTileSize{})));
+    // 0/Hight/vertical/ 
+    const int prefetch_b_coord_0 =  is_B_transposed ? n_idx * BLK_N: k_start_idx * BLK_K;
+    // 1/Width/Horisontal 
+    const int prefetch_b_coord_1 =  is_B_transposed ? k_start_idx * BLK_K : n_idx * BLK_N;
+    constexpr int ld_b = is_B_transposed ? 1 : 0;
+    auto prefetch_b_coordinate = make_coord(prefetch_b_coord_0 + (sub_group_id / get<1>(PrefetchBThrShape{})) * get<0>(PrefetchBTileSize{}),
+                                            prefetch_b_coord_1 + (sub_group_id % get<1>(PrefetchBThrShape{})) * get<1>(PrefetchBTileSize{}),
+                                            l_coord);
+    Tensor block2d_prefetch_iter_b = tiled_prefetch_b.get_pvc_tensor(prefetch_b_coordinate, make_shape(_1{}, _1{}, _1{}));
+    // no transpose prefetch size(8x32), prefetch shape is (4x8)
+    Tensor prefetch_iter_b = append_pvc_tensor<ld_b>(block2d_prefetch_iter_b, k_tile_count,
+                                                      (get<ld_b>(PrefetchBThrShape{}) * get<ld_b>(PrefetchBTileSize{})));
 
     constexpr int barrier_scope = 2;
     int prefetch_k = 0;
@@ -312,15 +307,15 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
     for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
       barrier_arrive(barrier_scope);
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), copy_tCrA);
-      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), copy_tCrB);
+      copy(mainloop.copy_A, tAgA(_,_,_,k_tile), tArA);
+      copy(mainloop.copy_B, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, prefetch_iter_a(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, prefetch_iter_b(_, _, _, prefetch_k));
       }
 
-      cute::gemm(tiled_mma, mma_tCrA, mma_tCrB, accum);
+      cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
   }
