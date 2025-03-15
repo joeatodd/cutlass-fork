@@ -167,6 +167,16 @@ struct CallCOPY {
 // Utility for exploding pointers/arrays/tensors into functions
 //
 
+template <class Fn, class CoordT,
+          class PtrA, int... I>
+CUTE_HOST_DEVICE
+void
+explodey(
+        const void* baseoffset, int width, int height, int pitch, CoordT&& coord, PtrA&& a, int_sequence<I...>)
+{
+  return Fn::template copy<short>(baseoffset, width, height, pitch, coord, a[I]...);
+}
+
 template <class Fn,
           class PtrA, int... I>
 CUTE_HOST_DEVICE constexpr

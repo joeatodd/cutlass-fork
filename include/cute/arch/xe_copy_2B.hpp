@@ -571,16 +571,87 @@ struct XE_2D_U16x16x32_LD_N {
 
 struct XE_2D_U16x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
-
+  using DRegisters = ushort[64];
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
-                                    T *dst) {
+                                    short& d0, 
+                                    short& d1, 
+                                    short& d2, 
+                                    short& d3, 
+                                    short& d4, 
+                                    short& d5, 
+                                    short& d6, 
+                                    short& d7, 
+                                    short& d8, 
+                                    short& d9, 
+                                    short& d10, 
+                                    short& d11, 
+                                    short& d12, 
+                                    short& d13, 
+                                    short& d14, 
+                                    short& d15, 
+                                    short& d16, 
+                                    short& d17, 
+                                    short& d18, 
+                                    short& d19, 
+                                    short& d20, 
+                                    short& d21, 
+                                    short& d22, 
+                                    short& d23, 
+                                    short& d24, 
+                                    short& d25, 
+                                    short& d26, 
+                                    short& d27, 
+                                    short& d28, 
+                                    short& d29, 
+                                    short& d30, 
+                                    short& d31, 
+                                    short& d32, 
+                                    short& d33, 
+                                    short& d34, 
+                                    short& d35, 
+                                    short& d36, 
+                                    short& d37, 
+                                    short& d38, 
+                                    short& d39, 
+                                    short& d40, 
+                                    short& d41, 
+                                    short& d42, 
+                                    short& d43, 
+                                    short& d44, 
+                                    short& d45, 
+                                    short& d46, 
+                                    short& d47, 
+                                    short& d48, 
+                                    short& d49, 
+                                    short& d50, 
+                                    short& d51, 
+                                    short& d52, 
+                                    short& d53, 
+                                    short& d54, 
+                                    short& d55, 
+                                    short& d56, 
+                                    short& d57, 
+                                    short& d58, 
+                                    short& d59, 
+                                    short& d60, 
+                                    short& d61, 
+                                    short& d62, 
+                                    short& d63
+                                    ) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<intel::ushort64 *>(dst) =
+    // *reinterpret_cast<intel::ushort64 *>(dst) =
+      intel::ushort64 dst =
         __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
             (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+    d0 = dst[0];
+    d1 = dst[1];
+    d2 = dst[2];
+    d3 = dst[3];
+    d4 = dst[4];
+    d5 = dst[5];
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif

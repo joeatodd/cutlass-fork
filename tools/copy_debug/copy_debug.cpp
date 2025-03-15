@@ -126,7 +126,7 @@ void copy(int global_M, int global_N) {
 int main(){
   // for 16b copies use integers as floating point types could lose precision for bigger indices
   // for 8b copies you have to work with overflow
-  copy<XE_2D_U16x32x32_LD_V, int16_t>(256, 256);
+  // copy<XE_2D_U16x32x32_LD_V, int16_t>(256, 256);
   copy<XE_2D_U16x32x32_LD_N, int16_t>(256, 256);
   return 0;
 }

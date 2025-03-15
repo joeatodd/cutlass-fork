@@ -182,12 +182,17 @@ struct XE_2D_LD_Unpack {
     int x = is_need_reversed ? m : n;
     int y = is_need_reversed ? n : m;
     constexpr auto inst_size = detail::size_of_inst<CopyOp, dtype>;
+    using RegTypeDst = typename remove_extent<typename CopyOp::DRegisters>::type;
 
-    CopyOp::copy(base_addr + l * traits.stride_l,
-                 traits.width * sizeof(dtype), traits.height,
-                 traits.pitch * sizeof(dtype),
-                 intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
-                 &*dst.data());
+    constexpr int RegNumDst = extent<typename CopyOp::DRegisters>::value;
+    detail::explodey<CopyOp>(base_addr + l * traits.stride_l, traits.width * sizeof(dtype), traits.height,
+                     traits.pitch * sizeof(dtype),
+                     intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y}, dst,
+                     make_seq<RegNumDst>{});
+
+    // CopyOp::copy(base_addr + l * traits.stride_l, traits.width * sizeof(dtype), traits.height,
+    //              traits.pitch * sizeof(dtype),
+    //              intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y}, &*dst.data());
   }
 
   template <class... CA_Args, class TS, class SLayout>
