@@ -172,9 +172,9 @@ template <class Fn, class CoordT,
 CUTE_HOST_DEVICE
 void
 explodey(
-        const void* baseoffset, int width, int height, int pitch, CoordT&& coord, PtrA&& a, int_sequence<I...>)
+        const void* baseoffset, int width, int height, int pitch, CoordT&& coord, PtrA&& a, int_sequence<I...> IS)
 {
-  return Fn::template copy<short>(baseoffset, width, height, pitch, coord, a[I]...);
+  return Fn::template copy<short>(baseoffset, width, height, pitch, coord, IS, a[I]...);
 }
 
 template <class Fn,
