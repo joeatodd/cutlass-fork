@@ -31,7 +31,7 @@
  **************************************************************************************************/
 
 #if defined(CUTLASS_ENABLE_SYCL)
-#include <syclcompat/syclcompat.hpp>
+#include <syclcompat/id_query.hpp>
 
 #include <vector>
 #else
@@ -102,7 +102,7 @@ class device_vector {
 
  private:
   T* safe_malloc(std::size_t size) {
-    T* ptr = syclcompat::malloc<T>(size * sizeof(T));
+    T* ptr = syclcompat_temp::malloc<T>(size * sizeof(T)); // TODO(joe): this alloc is too large?
     if(!ptr) {
       throw std::runtime_error("Allocation Failed.");
     }
@@ -112,7 +112,7 @@ class device_vector {
     return std::shared_ptr<T>(safe_malloc(size), [=](T* ptr) {
       if (ptr != nullptr) {
         syclcompat::wait_and_throw();
-        syclcompat::free(ptr);
+        syclcompat_temp::free(ptr);
       }
     });
   }
@@ -124,7 +124,7 @@ template<typename T>
 host_vector<T>& host_vector<T>::operator=(device_vector<T> device_vec) {
     syclcompat::wait_and_throw();
     host_vector host_vec(device_vec.size());
-    syclcompat::memcpy(host_vec.data(), device_vec.data(),
+    syclcompat_temp::memcpy(host_vec.data(), device_vec.data(),
                        device_vec.size() * sizeof(T));
     *this = host_vec;
     return *this;
@@ -134,7 +134,7 @@ template<typename T>
 host_vector<T>::host_vector(device_vector<T> device_vec) {
     syclcompat::wait_and_throw();
     host_vector host_vec(device_vec.size());
-    syclcompat::memcpy(host_vec.data(), device_vec.data(),
+    syclcompat_temp::memcpy(host_vec.data(), device_vec.data(),
                        device_vec.size() * sizeof(T));
     *this = host_vec;
 }
@@ -142,7 +142,7 @@ host_vector<T>::host_vector(device_vector<T> device_vec) {
 template<typename T>
 device_vector<T>& device_vector<T>::operator=(host_vector<T> host_vec) {
     device_vector device_vec(host_vec.size());
-    syclcompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    syclcompat_temp::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
     syclcompat::wait_and_throw();
     *this = device_vec;
     return *this;
@@ -151,7 +151,7 @@ device_vector<T>& device_vector<T>::operator=(host_vector<T> host_vec) {
 template<typename T>
 device_vector<T>::device_vector(host_vector<T> host_vec) {
     device_vector device_vec(host_vec.size());
-    syclcompat::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
+    syclcompat_temp::memcpy(device_vec.data(), host_vec.data(), host_vec.size() * sizeof(T));
     syclcompat::wait_and_throw();
     *this = device_vec;
 }

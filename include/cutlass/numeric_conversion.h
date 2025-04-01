@@ -46,6 +46,7 @@
 #include "cutlass/array.h"
 #include "cutlass/half.h"
 #include "cutlass/bfloat16.h"
+#include <syclcompat/math.hpp>
 
 namespace cutlass {
 

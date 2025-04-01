@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <syclcompat/device.hpp>
 #if !defined(__CUDACC_RTC__) && !defined(CUTLASS_ENABLE_SYCL)
 #include "cuda.h"
 #include "cuda_runtime.h"
@@ -66,7 +67,8 @@ zero_workspace(
     CUTLASS_TRACE_HOST("  clearing workspace");
 
 #if defined (CUTLASS_ENABLE_SYCL)
-    syclcompat::memset_async(workspace, 0, workspace_size);
+    sycl::queue q = syclcompat::get_default_queue();
+    q.memset(workspace, 0, workspace_size);
 #elif defined(CUTLASS_ENABLE_CUDA_HOST_ADAPTER) && CUTLASS_ENABLE_CUDA_HOST_ADAPTER
     //
     // Use the cuda host adapter

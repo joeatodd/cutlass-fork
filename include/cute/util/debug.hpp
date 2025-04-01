@@ -37,7 +37,8 @@
 
 #if defined(CUTLASS_ENABLE_SYCL)
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
+#include <syclcompat/dims.hpp>
+#include <syclcompat/id_query.hpp>
 #else
 #include <cuda_runtime_api.h>
 #endif

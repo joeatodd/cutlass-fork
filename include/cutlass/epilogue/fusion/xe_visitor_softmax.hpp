@@ -388,7 +388,7 @@ public:
       constexpr auto vec_size = min(Epi_M, Sg_N);
       constexpr auto vec_folds = Epi_M / vec_size;
 
-      auto smem = syclcompat::local_mem<float[Sg_Nums * vec_size]>();
+      auto smem = syclcompat_temp::local_mem<float[Sg_Nums * vec_size]>();
       Tensor stensor = make_tensor(make_smem_ptr(smem), make_shape(Int<vec_size>{}, Int<Sg_N>{}, Int<Sg_M>{}));
 
       Tensor res =

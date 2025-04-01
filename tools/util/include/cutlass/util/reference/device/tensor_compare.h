@@ -34,6 +34,7 @@
 
 #pragma once
 // Standard Library includes
+#include <syclcompat/device.hpp>
 #include <utility>
 
 // Cutlass includes
@@ -149,11 +150,13 @@ bool BlockCompareEqual(
   int *device_equal_flag = nullptr;
 
 #if defined (CUTLASS_ENABLE_SYCL)
-  device_equal_flag = reinterpret_cast<int*>(syclcompat::malloc(sizeof(int)));
+  auto q = syclcompat::get_default_queue();
+  device_equal_flag = reinterpret_cast<int*>(sycl::malloc_device(sizeof(int), q));
   if (device_equal_flag == nullptr) {
     throw std::runtime_error("Failed to allocate device flag.");
   }
-  syclcompat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
+  // TODO(joe): here too
+  q.memcpy(device_equal_flag, &equal_flag, sizeof(int));
 #else
   if (cudaMalloc((void **)&device_equal_flag, sizeof(int)) != cudaSuccess) {
     throw std::runtime_error("Failed to allocate device flag.");
@@ -196,9 +199,9 @@ bool BlockCompareEqual(
   syclcompat::launch<kernel::BlockCompareEqual<Element>>(sycl_grid, sycl_block, device_equal_flag, ptr_A, ptr_B, capacity);
   syclcompat::wait();
 
-  syclcompat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
+  q.memcpy(&equal_flag, device_equal_flag, sizeof(int));
 
-  syclcompat::free(reinterpret_cast<void*>(device_equal_flag));
+  sycl::free(reinterpret_cast<void*>(device_equal_flag), q);
 #else
   dim3 grid(grid_size, 1, 1);
   dim3 block(block_size, 1, 1);
@@ -238,11 +241,12 @@ bool BlockCompareRelativelyEqual(
   int *device_equal_flag = nullptr;
 
 #if defined (CUTLASS_ENABLE_SYCL)
-  device_equal_flag = reinterpret_cast<int*>(syclcompat::malloc(sizeof(int)));
+  auto q = syclcompat::get_default_queue();
+  device_equal_flag = reinterpret_cast<int*>(sycl::malloc_device(sizeof(int), q));
   if (device_equal_flag == nullptr) {
     throw std::runtime_error("Failed to allocate device flag.");
   }
-  syclcompat::memcpy(device_equal_flag, &equal_flag, sizeof(int));
+  q.memcpy(device_equal_flag, &equal_flag, sizeof(int));
 #else
   if (cudaMalloc((void **)&device_equal_flag, sizeof(int)) != cudaSuccess) {
     throw std::runtime_error("Failed to allocate device flag.");
@@ -287,9 +291,9 @@ bool BlockCompareRelativelyEqual(
                                                                   epsilon, nonzero_floor);
   syclcompat::wait();
 
-  syclcompat::memcpy(&equal_flag, device_equal_flag, sizeof(int));
+  q.memcpy(&equal_flag, device_equal_flag, sizeof(int));
 
-  syclcompat::free(reinterpret_cast<void*>(device_equal_flag));
+  sycl::free(reinterpret_cast<void*>(device_equal_flag), q);
 #else
   dim3 grid(grid_size, 1, 1);
   dim3 block(block_size, 1, 1);

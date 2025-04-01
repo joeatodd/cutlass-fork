@@ -31,6 +31,7 @@
 #pragma once
 
 #include "cutlass/detail/helper_macros.hpp"
+#include <complex>
 
 namespace cutlass {
 // Add these definitions in the cutlass namespace, so they do not clash with the ones in cuda

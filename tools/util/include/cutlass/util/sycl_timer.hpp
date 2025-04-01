@@ -32,7 +32,7 @@
 #pragma once
 
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
+#include <syclcompat/device.hpp>
 
 #if defined(CUTLASS_SYCL_PROFILING_ENABLED)
 #include "cutlass/util/sycl_event_manager.hpp"

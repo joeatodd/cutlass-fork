@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+ * Copyright (c) 2024 - 2025 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,10 @@
 
 #if defined(CUTLASS_ENABLE_SYCL)
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
+#include <syclcompat/id_query.hpp>
+#include <syclcompat/atomic.hpp>
+#include <syclcompat/launch.hpp>
+#include "syclcompat_temp.hpp"
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -245,7 +248,7 @@ unsigned int byte_perm(unsigned int x, unsigned int y, unsigned int s) {
 #if defined(__CUDA_ARCH__)
   return __byte_perm(x, y, s);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::byte_level_permute(x, y, s);
+  return syclcompat_temp::byte_level_permute(x, y, s);
 #else
   return 0;
 #endif
@@ -263,7 +266,7 @@ T shfl_up_sync(
 #if defined(__CUDA_ARCH__)
   return __shfl_up_sync(mask, var, delta, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::shift_sub_group_right(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
+  return syclcompat_temp::shift_sub_group_right(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
   return 0;
 #endif
@@ -279,7 +282,7 @@ T shfl_down_sync(
 #if defined(__CUDA_ARCH__)
   return __shfl_down_sync(mask, var, delta, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
-  return syclcompat::shift_sub_group_left(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
+  return syclcompat_temp::shift_sub_group_left(syclcompat::get_nd_item<1>().get_sub_group(), var, delta, width);
 #else
   return 0;
 #endif
@@ -314,7 +317,7 @@ T shfl_xor_sync(
   return __shfl_xor_sync(mask, var, laneMask, width);
 #elif defined(__SYCL_DEVICE_ONLY__)
   auto g = syclcompat::get_nd_item<1>().get_sub_group();
-  return syclcompat::permute_sub_group_by_xor(g, var, laneMask);
+  return syclcompat_temp::permute_sub_group_by_xor(g, var, laneMask);
 #else
   return 0;
 #endif
@@ -387,9 +390,13 @@ enum cudaMemcpyKind {
   cudaMemcpyDeviceToDevice = 3
 };
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 cudaError_t cudaMemsetAsync(void *devPtr, unsigned int value, size_t count, cudaStream_t stream = nullptr) {
-  syclcompat::fill_async(devPtr, value, count);
+  static_assert(std::is_same_v<T, void>, "cudaMemsetAsync takes a dummy template parameter, T = "
+                                         "void, to delay SYCL kernel instantiation");
+  sycl::queue q = syclcompat::get_default_queue();
+  q.fill(devPtr, value, count);
   return cudaSuccess;
 }
 
@@ -397,24 +404,36 @@ using CUresult = unsigned int;
 using CUdeviceptr = unsigned int*;
 constexpr CUresult CUDA_SUCCESS = 0;
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD32Async(CUdeviceptr devPtr, uint32_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD32Async takes a dummy template parameter, T = "
+                                         "void, to delay SYCL kernel instantiation");
   void *ptr = reinterpret_cast<void *>(devPtr);
-  syclcompat::fill_async(ptr, value, count);
+  sycl::queue q = syclcompat::get_default_queue();
+  q.fill(ptr, value, count);
   return cudaSuccess;
 }
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD16Async(CUdeviceptr devPtr, uint16_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD16Async takes a dummy template parameter, T = "
+                                         "void, to delay SYCL kernel instantiation");
   void *ptr = reinterpret_cast<void *>(devPtr);
-  syclcompat::fill_async(ptr, value, count);
+  sycl::queue q = syclcompat::get_default_queue();
+  q.fill(ptr, value, count);
   return cudaSuccess;
 }
 
+template <typename T = void>
 CUTLASS_HOST_DEVICE
 CUresult cuMemsetD8Async(CUdeviceptr devPtr, uint8_t value, size_t count, cudaStream_t stream = nullptr) {
+  static_assert(std::is_same_v<T, void>, "cuMemsetD8Async takes a dummy template parameter, T = "
+                                         "void, to delay SYCL kernel instantiation");
   void *ptr = reinterpret_cast<void *>(devPtr);
-  syclcompat::fill_async(ptr, value, count);
+  sycl::queue q = syclcompat::get_default_queue();
+  q.fill(ptr, value, count);
   return cudaSuccess;
 }
 

@@ -35,7 +35,9 @@
 
 #include <cute/tensor.hpp>
 #include <sycl/sycl.hpp>
-#include <syclcompat.hpp>
+#include <syclcompat/device.hpp>
+#include <syclcompat/dims.hpp>
+#include <syclcompat/launch.hpp>
 
 #include "cutlass_unit_test.h"
 
