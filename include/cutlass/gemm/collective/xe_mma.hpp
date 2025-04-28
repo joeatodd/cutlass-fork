@@ -155,6 +155,9 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
+    auto m_sg = get_sub_group_id() / ATOM_N;
+    auto n_sg = get_sub_group_id() % ATOM_N;
+
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
 
@@ -221,9 +224,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-      if (syclcompat::get_nd_item<1>().get_sub_group().get_group_linear_id() == 0)
+      if (n_sg == 0)
         prefetch(mainloop.tiled_copy_a, tAgA(_,_,_,prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+      if (m_sg == 0)
+        prefetch(mainloop.tiled_copy_b, tBgB(_,_,_,prefetch_k));
     }
 
     CUTLASS_PRAGMA_UNROLL
@@ -234,9 +238,10 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
-        if (syclcompat::get_nd_item<1>().get_sub_group().get_group_linear_id() == 0)
+        if (n_sg == 0)
           prefetch(mainloop.tiled_copy_a, tAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+        if (m_sg == 0)
+          prefetch(mainloop.tiled_copy_b, tBgB(_,_,_,prefetch_k));
       }
 
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
