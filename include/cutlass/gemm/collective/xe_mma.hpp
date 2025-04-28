@@ -221,7 +221,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
 
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-      prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+      if (syclcompat::get_nd_item<1>().get_sub_group().get_group_linear_id() == 0)
+        prefetch(mainloop.tiled_copy_a, tAgA(_,_,_,prefetch_k));
       prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
     }
 
@@ -233,7 +234,8 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
 
       if (prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+        if (syclcompat::get_nd_item<1>().get_sub_group().get_group_linear_id() == 0)
+          prefetch(mainloop.tiled_copy_a, tAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
 
