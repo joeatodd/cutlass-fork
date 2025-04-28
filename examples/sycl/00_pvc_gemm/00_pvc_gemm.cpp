@@ -82,6 +82,8 @@ using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+constexpr int count = 3;
+
 // Command line options parsing
 struct Options {
 
@@ -174,11 +176,11 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  cutlass::DeviceAllocation<ElementA> block_A;
-  cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementC> block_C;
+  std::vector<cutlass::DeviceAllocation<ElementA>> block_A;
+  std::vector<cutlass::DeviceAllocation<ElementB>> block_B;
+  std::vector<cutlass::DeviceAllocation<ElementC>> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
-  cutlass::DeviceAllocation<ElementOutput> block_ref_D; // Reference GEMM result for verification
+  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
   //
   // Methods
@@ -187,9 +189,9 @@ struct ExampleRunner {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_A(block_A[0].get(), LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(block_B[0].get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
     cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
@@ -231,15 +233,25 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(static_cast<std::size_t>(M) * K * L);
-    block_B.reset(static_cast<std::size_t>(K) * N * L);
-    block_C.reset(static_cast<std::size_t>(M) * N * L);
+    for(int i=0; i < count; i++) {
+      block_A.emplace_back();
+      block_B.emplace_back();
+      block_C.emplace_back();
+    }
+    std::size_t size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
+    std::size_t size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
+    std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
+
+    for (int i=0; i < count; i++) {
+      block_A[i].reset(size_A);
+      block_B[i].reset(size_B);
+      block_C[i].reset(size_C);
+      initialize_block(block_A[i], seed + i);
+      initialize_block(block_B[i], seed + i);
+      initialize_block(block_C[i], seed + i);
+    }
     block_D.reset(static_cast<std::size_t>(M) * N * L);
     block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
-
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -250,8 +262,8 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {block_A[0].get(), stride_A, block_B[0].get(), stride_B},
+      {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
 
@@ -282,6 +294,16 @@ struct ExampleRunner {
       GPU_Clock timer;
       timer.start();
       for (int i = 0; i < options.iterations; ++i) {
+
+        int input_num = std::max(int(0), i % count);
+        typename Gemm::GemmKernel::Arguments arguments{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B},
+          {{options.alpha, options.beta}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
+          hw_info
+        };
+
         gemm_op.run();
       }
       syclcompat::wait();
@@ -340,16 +362,15 @@ int main(int argc, const char** argv)
   using ElementOutput = float;           // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
   // The 2D block copy operations used for the A and B matrices
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-
+  using GmemTiledCopyA = XE_2D_U16x8x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_8, _128, _32>;
 
   // A TiledMMA struct defines a tiling of an MMA atom over M, N and K, combining both additional
   // hardware (sub-groups for Intel PVC) and iterations by each sub-group.
@@ -361,9 +382,11 @@ int main(int argc, const char** argv)
   // each sub-group operates on a contiguous 32x64x32 chunk (4x4x2 iterations). See
   // 0t_mma_atom.md#TiledMMAs for more info. Sub-groups are arranged row-major (stride 4,1,0) for
   // performance reasons.
-  using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+  using TiledMma = TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<Shape<_8, _128, _32>>,
+        Layout<Shape<_1, _4, _1>, Stride<_0, _1, _0>>>::TiledMMA;
+  // using TiledMma =                    // M=8,N=16,K=16, D=f32,A=bf16,B=bf16,C=f32
+  //     typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+  //                                   Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   // For Intel PVC, PipelineStages defines how many k-blocks ahead to prefetch from A and B.
   constexpr int PipelineStages = 2;
