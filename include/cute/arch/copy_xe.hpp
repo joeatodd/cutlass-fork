@@ -34,11 +34,12 @@
 #define CUTE_ARCH_COPY_XE_ENABLED
 #endif
 
-#if defined(CUTE_ARCH_COPY_XE_ENABLED) && ((defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250200)) || defined(CUTLASS_SYCL_BUILTIN_ENABLE))
+// TODO(joe): implement this properly
+// #if defined(CUTE_ARCH_COPY_XE_ENABLED) && ((defined(__INTEL_LLVM_COMPILER) && (__INTEL_LLVM_COMPILER < 20250200)) || defined(CUTLASS_SYCL_BUILTIN_ENABLE))
 #include <cute/arch/copy_xe_builtin.hpp>
-#elif defined(CUTE_ARCH_COPY_XE_ENABLED)
-#include <cute/arch/copy_xe_spirv.hpp>
-#endif
+// #elif defined(CUTE_ARCH_COPY_XE_ENABLED)
+// #include <cute/arch/copy_xe_spirv.hpp>
+// #endif
 
 #include <cute/arch/copy_xe_U4.hpp>
 #include <cute/arch/copy_xe_U8.hpp>

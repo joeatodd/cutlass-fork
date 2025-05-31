@@ -318,13 +318,18 @@ struct XE_2D_U16x16x32_LD_N {
 struct XE_2D_U16x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
 
-  template <class T>
+  using DRegisters = ushort[64];
+  template <class T, int... I, class ...Args>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
-                                    T *dst) {
+                                    int_sequence<I...>, Args&... args){
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    detail::XeSubgroup2DBlockLoad<2, 16, 32, 2>{}(baseoffset, width, height, pitch, coord, dst);
+    // TODO(joe): Do this in the `XeSubgroup2DBlockLoad` way...
+    intel::ushort64 dst =
+      __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
+          (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+    ((args = dst[I]), ...);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif

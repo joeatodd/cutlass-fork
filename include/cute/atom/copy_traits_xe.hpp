@@ -281,12 +281,15 @@ struct XE_2D_LD_Unpack {
     int y = is_need_reversed ? n : m;
 
     constexpr auto inst_size_bits = detail::size_of_inst_bits<CopyOp, dtype>;
-
-    CopyOp::copy(base_addr + static_cast<size_t>(l) * traits.stride_l,
-                 (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>, traits.height,
-                 (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
-                 intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y},
-                 raw_pointer_cast(&((&*dst.data())[0])));
+    // using RegTypeDst = typename remove_extent<typename CopyOp::DRegisters>::type;
+    // TODO(joe): Do we need ^-this for anything?
+    constexpr int RegNumDst = extent<typename CopyOp::DRegisters>::value;
+    detail::explodey<CopyOp>(base_addr + static_cast<size_t>(l) * traits.stride_l,
+                             (traits.width * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
+                             traits.height,
+                             (traits.pitch * sizeof_bits_v<dtype>) / sizeof_bits_v<int8_t>,
+                             intel::coord_t{(int)(x * sizeof_bits_v<dtype> / inst_size_bits), y},
+                             dst, make_seq<RegNumDst>{});
   }
 
   template <class... CA_Args, class TS, class SLayout>
