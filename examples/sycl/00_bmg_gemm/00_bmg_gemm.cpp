@@ -346,7 +346,7 @@ int main(int argc, const char** argv)
 
   // The 2D block copy operations used for the A and B matrices
   using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;

@@ -329,7 +329,7 @@ struct XE_2D_U16x32x32_LD_N {
     intel::ushort64 dst =
       __builtin_IB_subgroup_block_read_flat_u16_m32k16v2(
           (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
-    ((args = dst[I]), ...);
+    ((args = *reinterpret_cast<T*>(&dst[I])), ...);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif

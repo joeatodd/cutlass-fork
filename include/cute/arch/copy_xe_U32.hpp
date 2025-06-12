@@ -86,13 +86,17 @@ struct XE_2D_U32x4x16_LD_N {
 struct XE_2D_U32x8x16_LD_N {
   using BlockShape = Shape<_8, _16>;
 
-  template <class T>
+  using DRegisters = uint[8]; // TODO(joe): Fix this
+  template <class T, int... I, class ...Args>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
-                                    T *dst) {
+                                    int_sequence<I...>, Args&... args){
 #if defined(CUTE_ARCH_COPY_XE_ENABLED)
     static_assert(sizeof(T) == 4, "Expected T to have size 4");
-    detail::XeSubgroup2DBlockLoad<4, 16, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    // detail::XeSubgroup2DBlockLoad<4, 16, 8, 1>{}(baseoffset, width, height, pitch, coord, dst);
+    intel::uint8 dst = __builtin_IB_subgroup_block_read_flat_u32_m8k16v1(
+           reinterpret_cast<long>(srcBasePointer), memoryWidth - 1, memoryHeight - 1, memoryPitch - 1, coordinate);
+    ((args = *reinterpret_cast<T*>(&dst[I])), ...);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-Xe hardware");
 #endif
